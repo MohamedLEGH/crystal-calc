@@ -5,10 +5,11 @@ a simple command line calculator
 Parse the input of the user and compute the result
 ## Installation
 
-git clone
+```
+git clone https://github.com/MohamedLEGH/crystal-calc
 cd calc
 crystal build calc.cr
-
+```
 ## Usage
 
 ./calc
