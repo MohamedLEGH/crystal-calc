@@ -1,0 +1,13 @@
+name: calc
+version: 0.1.0
+
+authors:
+  - MohamedLEGH <mohamed.amine.legheraba@gmail.com>
+
+targets:
+  calc:
+    main: src/calc.cr
+
+crystal: 0.27.0
+
+license: MIT
