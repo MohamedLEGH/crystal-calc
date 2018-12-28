@@ -1,8 +1,3 @@
-# TODO: Write documentation for `Calc`
-#module Calc
-#  VERSION = "0.1.0"
-  # TODO: Put your code here
-#end
 
 struct Token
 
@@ -230,10 +225,10 @@ while true
   if a # if a is a String
     if a.size>0
       lex = Lexer.new(a)
-      sem = Parser.new(lex.tokens)
-      ast = sem.parse
-      vis = Interpreter.new(ast)
-      result = vis.interpret
+      par = Parser.new(lex.tokens)
+      ast = par.parse
+      i = Interpreter.new(ast)
+      result = i.interpret
       puts result
     end
   else
