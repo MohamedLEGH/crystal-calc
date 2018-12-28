@@ -11,11 +11,11 @@ struct Token
     @value = value
   end
 
-  def type
+  def type : String
     return @type
   end
 
-  def value
+  def value : String|Char
     return @value
   end
 
@@ -27,14 +27,14 @@ end
 
 
 
-class Lexical
+class Lexer
 
   def initialize(data : String)
     @data = Char::Reader.new(data)
     @tokens = [] of Token
     tokenize
   end
-  
+
   def digit_string : String
     num = ""
     num += @data.current_char
@@ -77,7 +77,40 @@ class Lexical
   end
 end
 
-class Sementic
+abstract class AST
+end
+
+class BinOp < AST
+  getter op
+  getter left
+  getter right
+
+  def initialize(left : AST, op : Token, right : AST)
+  @left = left
+  @token = @op = op
+  @right = right
+  end
+end
+
+class Num < AST
+  @value : String|Char
+  getter token
+  getter value
+
+  def initialize(token : Token)
+    @token = token
+    @value = token.value
+  end
+
+  def op
+  return @token
+  end
+
+end
+
+
+
+class Parser
   def initialize(tokens : Array(Token))
     @tokens = tokens
     @pos_token = 0
@@ -96,44 +129,62 @@ class Sementic
     @pos_token+=1
   end
 
-  def factor : Int32
-    t = get_current_token.value
+  def factor : AST
+    t = get_current_token
     eat("NUMBER")
-    a = t.to_i
-    return a
+    #a = t.to_i
+    return Num.new(t)
   end
 
-def bracket_term : Int32
-  right = get_current_token.type
-  if right=="LPAR"
-    eat("LPAR")
-    value = calculus
-    eat("RPAR")
-  elsif right=="NUMBER"
-    value = factor
-  else
-    raise Exception.new("Error: Unexpected token in bracket : #{get_current_token}")
+  def bracket_term : AST
+    right = get_current_token.type
+    if right=="LPAR"
+      eat("LPAR")
+      value = calculus
+      eat("RPAR")
+    elsif right=="NUMBER"
+      value = factor
+    else
+      raise Exception.new("Error: Unexpected token in bracket : #{get_current_token}")
+    end
+    return value
   end
-  return value
-end
 
-
-  def term : Int32
+  def term : AST
     result_term = bracket_term
     while @pos_token<@tokens.size && ["MULT","DIV"].includes? get_current_token.type
-      case get_current_token.type
+      operand = get_current_token
+      case operand.type
       when "MULT"
         eat("MULT")
-        result_term*=bracket_term
+        #result_term*=bracket_term
       when "DIV"
         eat("DIV")
-        result_term/=bracket_term
+        #result_term/=bracket_term
       end
+        result_term = BinOp.new(left=result_term,op=operand,right=bracket_term)
     end
     return result_term
-    end
+  end
 
-  def computeSementic : Int32
+  def calculus : AST
+    result = term
+    while @pos_token<@tokens.size && ["PLUS","MINUS"].includes? get_current_token.type
+      operand = get_current_token
+      case operand.type
+      when "PLUS"
+        eat("PLUS")
+        #result +=term
+      when "MINUS"
+        eat("MINUS")
+        #result -=term
+      end
+      result = BinOp.new(left=result,op=operand,right=term)
+    end
+    return result
+  end
+
+  def parse : AST
     @pos_token = 0
     val = calculus
     if @pos_token<@tokens.size
@@ -141,22 +192,35 @@ end
     end
     return val
   end
+end
 
-  def calculus : Int32
+class Interpreter
 
-    result = term
-    while @pos_token<@tokens.size && ["PLUS","MINUS"].includes? get_current_token.type
-      case get_current_token.type
-      when "PLUS"
-        eat("PLUS")
-        result +=term
-      when "MINUS"
-        eat("MINUS")
-        result -=term
-      end
+  def initialize(ast : AST)
+    @ast = ast
+  end
+
+  def interpret
+    return visit(@ast)
+  end
+
+  def visit(node : BinOp)
+    case node.op.type
+    when "PLUS"
+      return visit(node.left) + visit(node.right)
+    when "MINUS"
+      return visit(node.left) - visit(node.right)
+    when "MULT"
+      return visit(node.left) * visit(node.right)
+    when "DIV"
+      return visit(node.left) / visit(node.right)
+    else
+      raise Exception.new("Error: Unexpected node #{node}")
     end
-    return result
+  end
 
+  def visit(node : Num)
+    return node.value.to_i
   end
 end
 
@@ -165,9 +229,11 @@ while true
   a = gets
   if a # if a is a String
     if a.size>0
-      lex = Lexical.new(a)
-      sem = Sementic.new(lex.tokens)
-      result = sem.computeSementic
+      lex = Lexer.new(a)
+      sem = Parser.new(lex.tokens)
+      ast = sem.parse
+      vis = Interpreter.new(ast)
+      result = vis.interpret
       puts result
     end
   else
