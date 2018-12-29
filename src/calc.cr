@@ -1,17 +1,11 @@
 
 struct Token
+  getter type
+  getter value
 
   def initialize(type : String, value : String|Char)
     @type = type
     @value = value
-  end
-
-  def type : String
-    return @type
-  end
-
-  def value : String|Char
-    return @value
   end
 
   def inspect(io)
@@ -26,8 +20,6 @@ class Lexer
 
   def initialize(data : String)
     @data = Char::Reader.new(data)
-    @tokens = [] of Token
-    tokenize
   end
 
   def digit_string : String
@@ -40,36 +32,35 @@ class Lexer
   end
 
   def tokenize
+    tokens = [] of Token
     while @data.has_next?
       #puts "current = " , @data.current_char
       #puts "next = " , @data.peek_next_char
       i = @data.current_char
       case i
       when .number?
-        @tokens << Token.new("NUMBER", digit_string)
+        tokens << Token.new("NUMBER", digit_string)
       when '+'
-        @tokens << Token.new("PLUS", i)
+        tokens << Token.new("PLUS", i)
       when '-'
-        @tokens << Token.new("MINUS", i)
+        tokens << Token.new("MINUS", i)
       when '*'
-        @tokens << Token.new("MULT", i)
+        tokens << Token.new("MULT", i)
       when '/'
-        @tokens << Token.new("DIV", i)
+        tokens << Token.new("DIV", i)
       when '('
-        @tokens << Token.new("LPAR", i)
+        tokens << Token.new("LPAR", i)
       when ')'
-        @tokens << Token.new("RPAR", i)
+        tokens << Token.new("RPAR", i)
       when ' ', '\n', '\t'
       else
-        @tokens << Token.new("OTHER", i)
+        tokens << Token.new("OTHER", i)
       end
       @data.next_char
     end
+    return tokens
   end
 
-  def tokens
-    return @tokens
-  end
 end
 
 abstract class AST
@@ -87,18 +78,25 @@ class BinOp < AST
   end
 end
 
+class UnaryOp < AST
+  getter op
+  getter expr
+
+  def initialize(op : Token, expr : AST)
+    @token = @op = op
+    @expr = expr
+  end
+
+end
+
 class Num < AST
-  @value : String|Char
+  @value : Int32
   getter token
   getter value
 
   def initialize(token : Token)
     @token = token
-    @value = token.value
-  end
-
-  def op
-  return @token
+    @value = token.value.to_i
   end
 
 end
@@ -111,12 +109,12 @@ class Parser
     @pos_token = 0
   end
 
-  def get_current_token
+  def actual_token
     return @tokens[@pos_token]
   end
 
   def eat(type : String)
-    token = get_current_token
+    token = actual_token
     if token.type != type
       puts token
       raise Exception.new("Error in parsing")
@@ -124,48 +122,56 @@ class Parser
     @pos_token+=1
   end
 
-  def factor : AST
-    t = get_current_token
+  def number : AST
+    t = actual_token
     eat("NUMBER")
-    #a = t.to_i
     return Num.new(t)
   end
 
-  def bracket_term : AST
-    right = get_current_token.type
-    if right=="LPAR"
-      eat("LPAR")
-      value = calculus
-      eat("RPAR")
-    elsif right=="NUMBER"
-      value = factor
+  def bracket
+    eat("LPAR")
+    val = calculus
+    eat("RPAR")
+    return val
+  end
+
+  def factor : AST
+    t = actual_token
+    if t.type == "LPAR"
+      value = bracket
+    elsif t.type == "NUMBER"
+      value = number
+    elsif t.type == "PLUS"
+      eat("PLUS")
+      value = UnaryOp.new(t,factor)
+    elsif t.type == "MINUS"
+      eat("MINUS")
+      value = UnaryOp.new(t,factor)
     else
-      raise Exception.new("Error: Unexpected token in bracket : #{get_current_token}")
+      raise Exception.new("Error: Unexpected token in bracket : #{actual_token}")
     end
     return value
   end
 
   def term : AST
-    result_term = bracket_term
-    while @pos_token<@tokens.size && ["MULT","DIV"].includes? get_current_token.type
-      operand = get_current_token
+    result_term = factor
+    while @pos_token<@tokens.size && ["MULT","DIV"].includes? actual_token.type
+      operand = actual_token
       case operand.type
       when "MULT"
         eat("MULT")
-        #result_term*=bracket_term
       when "DIV"
         eat("DIV")
-        #result_term/=bracket_term
       end
-        result_term = BinOp.new(left=result_term,op=operand,right=bracket_term)
+        result_term = BinOp.new(left=result_term,op=operand,right=factor)
     end
     return result_term
   end
 
   def calculus : AST
     result = term
-    while @pos_token<@tokens.size && ["PLUS","MINUS"].includes? get_current_token.type
-      operand = get_current_token
+    while @pos_token<@tokens.size && ["PLUS","MINUS"].includes? actual_token.type
+      operand = actual_token
       case operand.type
       when "PLUS"
         eat("PLUS")
@@ -183,7 +189,7 @@ class Parser
     @pos_token = 0
     val = calculus
     if @pos_token<@tokens.size
-      raise Exception.new("Error: Unexpected token #{get_current_token}")
+      raise Exception.new("Error: Unexpected token #{actual_token}")
     end
     return val
   end
@@ -196,10 +202,10 @@ class Interpreter
   end
 
   def interpret
-    return visit(@ast)
+    return visit(@ast).to_s
   end
 
-  def visit(node : BinOp)
+  def visit(node : BinOp) : Int32
     case node.op.type
     when "PLUS"
       return visit(node.left) + visit(node.right)
@@ -214,8 +220,105 @@ class Interpreter
     end
   end
 
+  def visit(node : UnaryOp) : Int32
+    case node.op.type
+    when "PLUS"
+      return visit(node.expr)
+    when "MINUS"
+      return -1*visit(node.expr)
+    else
+      raise Exception.new("Error: Unexpected node #{node}")
+    end
+  end
+
+  def visit(node : Num) : Int32
+    return node.value
+  end
+end
+
+class InterpreterRPN < Interpreter
+  def visit(node : BinOp)
+    result = ""
+    left = visit(node.left)
+    leftnbminus = left.count('-')
+    leftclear = left.delete('-')
+    if leftnbminus%2 == 1
+      result += "-"
+    end
+    result += leftclear
+    result += " "
+    right = visit(node.right)
+    rightnbminus = right.count('-')
+    rightclear = right.delete('-')
+    if rightnbminus%2 == 1
+      result += "-"
+    end
+    result += rightclear
+    result += " "
+    result += node.op.value
+    return result
+  end
+
+  def visit(node : UnaryOp)
+    result = ""
+    case node.op.type
+    when "PLUS"
+      result += visit(node.expr)
+    when "MINUS"
+      result += "-"
+      result += visit(node.expr)
+    else
+      raise Exception.new("Error: Unexpected node #{node}")
+    end
+    return result
+  end
+
+
   def visit(node : Num)
-    return node.value.to_i
+    return node.value.to_s
+  end
+end
+
+class InterpreterLISP < Interpreter
+  def visit(node : BinOp)
+    result = "("
+    result += node.op.value
+    result += " "
+    left = visit(node.left)
+    leftnbminus = left.count('-')
+    leftclear = left.delete('-')
+    if leftnbminus%2 == 1
+      result += "-"
+    end
+    result += leftclear
+    result += " "
+    right = visit(node.right)
+    rightnbminus = right.count('-')
+    rightclear = right.delete('-')
+    if rightnbminus%2 == 1
+      result += "-"
+    end
+    result += rightclear
+    result += ")"
+    return result
+  end
+
+  def visit(node : UnaryOp)
+    result = ""
+    case node.op.type
+    when "PLUS"
+      result += visit(node.expr)
+    when "MINUS"
+      result += "-"
+      result += visit(node.expr)
+    else
+      raise Exception.new("Error: Unexpected node #{node}")
+    end
+    return result
+  end
+
+  def visit(node : Num)
+    return node.value.to_s
   end
 end
 
@@ -225,11 +328,18 @@ while true
   if a # if a is a String
     if a.size>0
       lex = Lexer.new(a)
-      par = Parser.new(lex.tokens)
+      list_tokens = lex.tokenize
+      par = Parser.new(list_tokens)
       ast = par.parse
       i = Interpreter.new(ast)
       result = i.interpret
       puts result
+      rpn = InterpreterRPN.new(ast)
+      rpn_result = rpn.interpret
+      puts rpn_result
+      lisp = InterpreterLISP.new(ast)
+      lisp_result = lisp.interpret
+      puts lisp_result
     end
   else
     puts "\nGoodbye!"
