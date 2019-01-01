@@ -175,10 +175,8 @@ class Parser
       case operand.type
       when "PLUS"
         eat("PLUS")
-        #result +=term
       when "MINUS"
         eat("MINUS")
-        #result -=term
       end
       result = BinOp.new(left=result,op=operand,right=term)
     end
@@ -240,20 +238,10 @@ class InterpreterRPN < Interpreter
   def visit(node : BinOp)
     result = ""
     left = visit(node.left)
-    leftnbminus = left.count('-')
-    leftclear = left.delete('-')
-    if leftnbminus%2 == 1
-      result += "-"
-    end
-    result += leftclear
+    result += left
     result += " "
     right = visit(node.right)
-    rightnbminus = right.count('-')
-    rightclear = right.delete('-')
-    if rightnbminus%2 == 1
-      result += "-"
-    end
-    result += rightclear
+    result += right
     result += " "
     result += node.op.value
     return result
@@ -269,6 +257,11 @@ class InterpreterRPN < Interpreter
       result += visit(node.expr)
     else
       raise Exception.new("Error: Unexpected node #{node}")
+    end
+    minuscount = result.count('-')
+    result = result.delete('-')
+    if minuscount%2 == 1
+      result = '-' + result
     end
     return result
   end
@@ -285,20 +278,10 @@ class InterpreterLISP < Interpreter
     result += node.op.value
     result += " "
     left = visit(node.left)
-    leftnbminus = left.count('-')
-    leftclear = left.delete('-')
-    if leftnbminus%2 == 1
-      result += "-"
-    end
-    result += leftclear
+    result += left
     result += " "
     right = visit(node.right)
-    rightnbminus = right.count('-')
-    rightclear = right.delete('-')
-    if rightnbminus%2 == 1
-      result += "-"
-    end
-    result += rightclear
+    result += right
     result += ")"
     return result
   end
@@ -313,6 +296,11 @@ class InterpreterLISP < Interpreter
       result += visit(node.expr)
     else
       raise Exception.new("Error: Unexpected node #{node}")
+    end
+    minuscount = result.count('-')
+    result = result.delete('-')
+    if minuscount%2 == 1
+      result = '-' + result
     end
     return result
   end
